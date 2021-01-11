@@ -8,9 +8,9 @@
 
 typedef struct
 {
-	uint8_t* data;
-	uint16_t totalSize;
-	int32_t numberOfParent;
+    uint8_t* data;
+    uint16_t totalSize;
+    int32_t numberOfParent;
 } t_buf;
 
 bool Get_Buffer(t_buf* buffer);
