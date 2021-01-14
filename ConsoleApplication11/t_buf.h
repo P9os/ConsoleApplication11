@@ -3,14 +3,14 @@
 #include "pch.h"
 
 #define BLOCK_SIZE 256
-#define BLOCK_COUNT 32
 #define BUFFER_SIZE 8192
+#define BLOCK_COUNT (uint8_t)(BUFFER_SIZE/BLOCK_SIZE)
 
 typedef struct
 {
-    uint8_t* data;
     uint16_t totalSize;
     int32_t numberOfParent;
+    uint16_t offset;
 } t_buf;
 
 bool Get_Buffer(t_buf* buffer);

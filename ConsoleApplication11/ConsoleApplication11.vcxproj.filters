@@ -24,12 +24,18 @@
     <ClInclude Include="t_buf.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="memhelper.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="t_buf.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="memhelper.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
