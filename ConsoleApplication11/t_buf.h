@@ -6,6 +6,8 @@
 #define BUFFER_SIZE 8192
 #define BLOCK_COUNT (uint8_t)(BUFFER_SIZE/BLOCK_SIZE)
 
+#define NOT_FOUND -1
+
 typedef struct
 {
     uint16_t totalSize;
@@ -25,5 +27,5 @@ bool Join_Buffer(t_buf* buffer, uint8_t* data, uint16_t size, uint16_t position)
 
 bool Free_Buffer(t_buf* buffer);
 
-bool Terminate_Buffer();
+bool Terminate_Buffer(void);
 #endif // !__T_BUF_H_

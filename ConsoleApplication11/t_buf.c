@@ -4,9 +4,15 @@ static uint8_t isInit = 0;
 static uint8_t* iBuffer;
 static int32_t BufferMapParent[BLOCK_COUNT] = { 0 };
 
-static void Init();
-static int8_t GetAvailBlock();
-
+static void Init(void);
+static int8_t FindBlock(int32_t numberOfParent, uint8_t countSkip);
+static uint8_t* GetAddr(int32_t numberOfParentToFind, uint16_t offset);
+static uint8_t* GetAddrAndMarkBlock(int32_t numberOfParentToFind, int32_t numberForMark, uint16_t offset);
+/// <summary>
+/// Initialize new buffer
+/// </summary>
+/// <param name="buffer">Link on unready buffer</param>
+/// <returns>Success</returns>
 bool Get_Buffer(t_buf* buffer)
 {
 	if (!isInit)
@@ -18,102 +24,123 @@ bool Get_Buffer(t_buf* buffer)
 	buffer->offset = 0;
 	return 1;
 }
-
+/// <summary>
+/// Write to buffer
+/// </summary>
+/// <param name="buffer">Link on initialized buffer</param>
+/// <param name="data">Link on copyiable buffer</param>
+/// <param name="size">Size of data buffer</param>
+/// <returns>Success</returns>
 bool Write_Buffer(t_buf* buffer, uint8_t* data, uint16_t size)
 {
 	if (size > BUFFER_SIZE || size == 0 || data == NULL) return 0;
-	uint8_t nReqBlocks = size / BLOCK_SIZE;
-	nReqBlocks += 1;
-	while (nReqBlocks && size < BUFFER_SIZE)
+	uint16_t o = buffer->offset;
+	uint8_t* addr = GetAddrAndMarkBlock(buffer->numberOfParent, buffer->numberOfParent, o);
+	if (addr == NULL)
 	{
-		int8_t nBlockAvail = GetAvailBlock();
-		if (nBlockAvail == -1) return 0;
-		int16_t s;
-		s = (size > BLOCK_SIZE) ? BLOCK_SIZE : size;
-		uint8_t* addr = &iBuffer[nBlockAvail * BLOCK_SIZE];
-		memcpy(addr, data, s);
-		BufferMapParent[nBlockAvail] = buffer->numberOfParent;
-		size -= BLOCK_SIZE;
-		nReqBlocks--;
+		addr = GetAddrAndMarkBlock(0, buffer->numberOfParent, o);
+		if (addr == NULL)
+		{
+			return 0;
+		}
 	}
+	addr += o % BLOCK_SIZE;
+	while (size)
+	{
+		if (o % BLOCK_SIZE == 0 && o != 0 )
+		{
+			// alloc new block
+			addr = GetAddrAndMarkBlock(0, buffer->numberOfParent, 0);
+			if (addr == NULL) return 0;
+		}
+		*addr++ = *data++;
+		size--;
+		o++;
+	}
+	buffer->offset = o;
 	return 1;
 }
-
+/// <summary>
+/// Write to buffer with position number
+/// </summary>
+/// <param name="buffer">Link on initialized buffer</param>
+/// <param name="data">Link on copyiable buffer</param>
+/// <param name="size">Size of data buffer</param>
+/// <param name="position">Shift in allocated buffer</param>
+/// <returns>Success</returns>
 bool Write_Buffer_Position(t_buf* buffer, uint8_t* data, uint16_t size, uint16_t position)
 {
-	if (size > BUFFER_SIZE || size == 0 || data == NULL) return 0;
-	uint8_t nReqBlock = size / BLOCK_SIZE;
-	nReqBlock += 1;
-	while (nReqBlock)
+	if (size > BUFFER_SIZE || size == 0 || data == NULL || position > buffer->offset) return 0;
+	uint16_t o = buffer->offset;
+	uint8_t* addr = GetAddrAndMarkBlock(buffer->numberOfParent, buffer->numberOfParent, position);
+	if (addr == NULL) return 0;
+	addr += position % BLOCK_SIZE;
+	while (size)
 	{
-		int8_t nBlockAvail = GetAvailBlock();
-		if (nBlockAvail == -1) return 0;
-		while (position > BLOCK_SIZE)
+		if (position % BLOCK_SIZE == 0 && o != 0)
 		{
-			BufferMapParent[nBlockAvail] = buffer->numberOfParent;
-			position -= BLOCK_SIZE;
-			nBlockAvail = GetAvailBlock();
+			addr = GetAddrAndMarkBlock(buffer->numberOfParent, buffer->numberOfParent, position);
+			if (addr == NULL)
+			{
+				addr = GetAddrAndMarkBlock(0, buffer->numberOfParent, 0);
+				if (addr == NULL) return 0;
+			}
 		}
-		uint8_t* addr = &iBuffer[nBlockAvail * BLOCK_SIZE];
-		uint8_t* zAddr = addr;
-		addr = addr + position;
-		memcpy(addr, data, size);
-		BufferMapParent[nBlockAvail] = buffer->numberOfParent;
-		nReqBlock--;
+		*addr++ = *data++;
+		position++;
+		if (position == o) o++;
+		size--;
 	}
+	buffer->offset = o;
 	return 1;
 }
-
+/// <summary>
+/// Read from internal buffer
+/// </summary>
+/// <param name="buffer">Link on initialized buffer</param>
+/// <param name="data">Link on copyiable buffer</param>
+/// <param name="size">Size of data buffer</param>
+/// <returns></returns>
 bool Read_Buffer(t_buf* buffer, uint8_t* data, uint16_t size)
 {
 	if (size > BUFFER_SIZE) return 0;
-	uint8_t* zeroAddr = data;
-	for (size_t i = 0; i < BLOCK_COUNT; i++)
+	uint16_t o = buffer->offset;
+	uint16_t p = 0;
+	while (size)
 	{
-		if (BufferMapParent[i] == buffer->numberOfParent && size > 0 && size < BUFFER_SIZE)
-		{
-			uint8_t* b = &iBuffer[i * BLOCK_SIZE];
-			uint16_t s;
-			s = (size > BLOCK_SIZE) ? BLOCK_SIZE : size;
-			memcpy(data, b, s);
-			data += BLOCK_SIZE;
-			size -= BLOCK_SIZE;
-		}
+		uint8_t* addr = GetAddr(buffer->numberOfParent, p);
+		addr += p % BLOCK_SIZE;
+		*data = *addr;
+		data++;
+		p++;
+		size--;
+		if (p == o) return 1;
 	}
-	data = zeroAddr;
 	return 1;
 }
-
+/// <summary>
+/// Read from internal buffer with position number
+/// </summary>
+/// <param name="buffer">Link on initialized buffer</param>
+/// <param name="data">Link on copyiable buffer</param>
+/// <param name="size">Size of data buffer</param>
+/// <param name="position">Shift in allocated buffer</param>
+/// <returns>Success</returns>
 bool Read_Buffer_Position(t_buf* buffer, uint8_t* data, uint16_t size, uint16_t position)
 {
 	if (size > BUFFER_SIZE) return 0;
-	uint8_t* zeroAddr = data;
-	for (size_t i = 0; i < BLOCK_COUNT; i++)
+	uint16_t o = buffer->offset;
+	uint16_t p = position;
+	while (size)
 	{
-		if (BufferMapParent[i] == buffer->numberOfParent && size > 0)
-		{
-			uint8_t* b = &iBuffer[i * BLOCK_SIZE];
-			uint16_t s;
-			if (position > BLOCK_SIZE)
-			{
-				position -= BLOCK_SIZE;
-				continue;
-			}
-			if (size > BLOCK_SIZE)
-			{
-				s = BLOCK_SIZE;
-			}
-			else
-			{
-				s = size;
-			}
-			b = b + position;
-			memcpy(data, b, s);
-			data += BLOCK_SIZE;
-			size -= BLOCK_SIZE;
-		}
+		uint8_t* addr = GetAddr(buffer->numberOfParent, p);
+		addr += p % BLOCK_SIZE;
+		*data = *addr;
+		data++;
+		p++;
+		size--;
+		if (p == o) return 1;
 	}
-	data = zeroAddr;
 	return 1;
 }
 
@@ -134,7 +161,7 @@ bool Free_Buffer(t_buf* buffer)
 	return 1;
 }
 
-bool Terminate_Buffer()
+bool Terminate_Buffer(void)
 {
 	free(iBuffer);
 	for (size_t i = 0; i < BLOCK_COUNT; i++)
@@ -145,20 +172,48 @@ bool Terminate_Buffer()
 	return 1;
 }
 
-static inline void Init()
+static inline void Init(void)
 {
 	iBuffer = (uint8_t*)calloc(sizeof(uint8_t), BUFFER_SIZE);
 	isInit = 1;
 }
 
-static inline int8_t GetAvailBlock()
+static inline int8_t FindBlock(int32_t numberOfParent, uint8_t countSkip)
 {
 	for (int8_t i = 0; i < BLOCK_COUNT; i++)
 	{
-		if (BufferMapParent[i] == 0)
+		if (BufferMapParent[i] == numberOfParent)
 		{
-			return i;
+			if (countSkip)
+			{
+				countSkip--;
+				continue;
+			}
+			else
+			{
+				return i;
+			}
 		}
 	}
-	return -1;
+	return NOT_FOUND;
+}
+
+static inline uint8_t* GetAddr(int32_t numberOfParentToFind, uint16_t offset)
+{
+	uint8_t nBlock = FindBlock(numberOfParentToFind, offset / BLOCK_SIZE);
+	return (nBlock != NOT_FOUND) ? &iBuffer[nBlock * BLOCK_SIZE] : NULL;
+}
+
+static inline uint8_t* GetAddrAndMarkBlock(int32_t numberOfParentToFind, int32_t numberForMark, uint16_t offset)
+{
+	int8_t nBlock = FindBlock(numberOfParentToFind, offset / BLOCK_SIZE);
+	if (nBlock != NOT_FOUND)
+	{
+		BufferMapParent[nBlock] = numberForMark;
+		return &iBuffer[nBlock * BLOCK_SIZE];
+	}
+	else
+	{
+		return NULL;
+	}
 }
