@@ -8,11 +8,8 @@ static void Init(void);
 static int8_t FindBlock(int32_t numberOfParent, uint8_t countSkip);
 static uint8_t* GetAddr(int32_t numberOfParentToFind, uint16_t offset);
 static uint8_t* GetAddrAndMarkBlock(int32_t numberOfParentToFind, int32_t numberForMark, uint16_t offset);
-/// <summary>
-/// Initialize new buffer
-/// </summary>
-/// <param name="buffer">Link on unready buffer</param>
-/// <returns>Success</returns>
+static uint8_t ShiftBufferLeft(t_buf* buffer, uint16_t position, uint16_t CountByteForShift);
+
 bool Get_Buffer(t_buf* buffer)
 {
 	if (!isInit)
@@ -24,13 +21,7 @@ bool Get_Buffer(t_buf* buffer)
 	buffer->offset = 0;
 	return 1;
 }
-/// <summary>
-/// Write to buffer
-/// </summary>
-/// <param name="buffer">Link on initialized buffer</param>
-/// <param name="data">Link on copyiable buffer</param>
-/// <param name="size">Size of data buffer</param>
-/// <returns>Success</returns>
+
 bool Write_Buffer(t_buf* buffer, uint8_t* data, uint16_t size)
 {
 	if (size > BUFFER_SIZE || size == 0 || data == NULL) return 0;
@@ -60,14 +51,7 @@ bool Write_Buffer(t_buf* buffer, uint8_t* data, uint16_t size)
 	buffer->offset = o;
 	return 1;
 }
-/// <summary>
-/// Write to buffer with position number
-/// </summary>
-/// <param name="buffer">Link on initialized buffer</param>
-/// <param name="data">Link on copyiable buffer</param>
-/// <param name="size">Size of data buffer</param>
-/// <param name="position">Shift in allocated buffer</param>
-/// <returns>Success</returns>
+
 bool Write_Buffer_Position(t_buf* buffer, uint8_t* data, uint16_t size, uint16_t position)
 {
 	if (size > BUFFER_SIZE || size == 0 || data == NULL || position > buffer->offset) return 0;
@@ -94,13 +78,7 @@ bool Write_Buffer_Position(t_buf* buffer, uint8_t* data, uint16_t size, uint16_t
 	buffer->offset = o;
 	return 1;
 }
-/// <summary>
-/// Read from internal buffer
-/// </summary>
-/// <param name="buffer">Link on initialized buffer</param>
-/// <param name="data">Link on copyiable buffer</param>
-/// <param name="size">Size of data buffer</param>
-/// <returns></returns>
+
 bool Read_Buffer(t_buf* buffer, uint8_t* data, uint16_t size)
 {
 	if (size > BUFFER_SIZE) return 0;
@@ -118,14 +96,7 @@ bool Read_Buffer(t_buf* buffer, uint8_t* data, uint16_t size)
 	}
 	return 1;
 }
-/// <summary>
-/// Read from internal buffer with position number
-/// </summary>
-/// <param name="buffer">Link on initialized buffer</param>
-/// <param name="data">Link on copyiable buffer</param>
-/// <param name="size">Size of data buffer</param>
-/// <param name="position">Shift in allocated buffer</param>
-/// <returns>Success</returns>
+
 bool Read_Buffer_Position(t_buf* buffer, uint8_t* data, uint16_t size, uint16_t position)
 {
 	if (size > BUFFER_SIZE) return 0;
@@ -146,7 +117,16 @@ bool Read_Buffer_Position(t_buf* buffer, uint8_t* data, uint16_t size, uint16_t 
 
 bool Join_Buffer(t_buf* buffer, uint8_t* data, uint16_t size, uint16_t position)
 {
-	return 0;
+	if (size > BUFFER_SIZE || data == NULL || size == 0 || position > buffer->offset) return 0;
+	if (ShiftBufferLeft(buffer, position, size))
+	{
+		Write_Buffer_Position(buffer, data, size, position);
+	}
+	else
+	{
+		return 0;
+	}
+	return 1;
 }
 
 bool Free_Buffer(t_buf* buffer)
@@ -155,6 +135,8 @@ bool Free_Buffer(t_buf* buffer)
 	{
 		if (BufferMapParent[i] == buffer->numberOfParent)
 		{
+			uint8_t* addr = &iBuffer[i * BLOCK_SIZE];
+			memset(addr, 0x00, 256);
 			BufferMapParent[i] = 0;
 		}
 	}
@@ -200,13 +182,13 @@ static inline int8_t FindBlock(int32_t numberOfParent, uint8_t countSkip)
 
 static inline uint8_t* GetAddr(int32_t numberOfParentToFind, uint16_t offset)
 {
-	uint8_t nBlock = FindBlock(numberOfParentToFind, offset / BLOCK_SIZE);
+	uint8_t nBlock = FindBlock(numberOfParentToFind, (uint8_t)(offset / BLOCK_SIZE));
 	return (nBlock != NOT_FOUND) ? &iBuffer[nBlock * BLOCK_SIZE] : NULL;
 }
 
 static inline uint8_t* GetAddrAndMarkBlock(int32_t numberOfParentToFind, int32_t numberForMark, uint16_t offset)
 {
-	int8_t nBlock = FindBlock(numberOfParentToFind, offset / BLOCK_SIZE);
+	int8_t nBlock = FindBlock(numberOfParentToFind, (uint8_t)(offset / BLOCK_SIZE));
 	if (nBlock != NOT_FOUND)
 	{
 		BufferMapParent[nBlock] = numberForMark;
@@ -216,4 +198,34 @@ static inline uint8_t* GetAddrAndMarkBlock(int32_t numberOfParentToFind, int32_t
 	{
 		return NULL;
 	}
+}
+
+static inline uint8_t ShiftBufferLeft(t_buf* buffer, uint16_t position, uint16_t CountByteForShift)
+{
+	uint16_t s = buffer->offset - position;
+	uint16_t p = position;
+	uint8_t b = 0;
+	t_buf tempBuf;
+	Get_Buffer(&tempBuf);
+	uint8_t tempData;
+	while (s)
+	{
+		b = Read_Buffer_Position(buffer, &tempData, 1, p);
+		b = Write_Buffer(&tempBuf, &tempData, 1);
+		p++;
+		s--;
+	}
+	s = buffer->offset - position;
+	p = position + CountByteForShift;
+	uint16_t i = 0;
+	while (s)
+	{
+		b = Read_Buffer_Position(&tempBuf, &tempData, 1, i);
+		b = Write_Buffer_Position(buffer, &tempData, 1, p);
+		p++;
+		i++;
+		s--;
+	}
+	Free_Buffer(&tempBuf);
+	return b;
 }
